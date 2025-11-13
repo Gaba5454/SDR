@@ -1,0 +1,3 @@
+/home/egor/SDR/dev/build/CMakeFiles/main.dir
+/home/egor/SDR/dev/build/CMakeFiles/edit_cache.dir
+/home/egor/SDR/dev/build/CMakeFiles/rebuild_cache.dir
