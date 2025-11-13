@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "stdlib.h": "c",
+        "stdint.h": "c",
+        "stdio.h": "c"
+    },
+    "cmake.sourceDirectory": "/home/egor/SDR/libiio/iiod"
+}
