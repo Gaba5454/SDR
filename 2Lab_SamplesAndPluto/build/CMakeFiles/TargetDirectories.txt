@@ -1,0 +1,3 @@
+/home/egor/SDR/2Lab_SamplesAndPluto/build/CMakeFiles/main.dir
+/home/egor/SDR/2Lab_SamplesAndPluto/build/CMakeFiles/edit_cache.dir
+/home/egor/SDR/2Lab_SamplesAndPluto/build/CMakeFiles/rebuild_cache.dir
