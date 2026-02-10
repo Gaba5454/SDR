@@ -1,3 +1,0 @@
-/home/egor/SDR/13Lab_TED/build/CMakeFiles/main.dir
-/home/egor/SDR/13Lab_TED/build/CMakeFiles/edit_cache.dir
-/home/egor/SDR/13Lab_TED/build/CMakeFiles/rebuild_cache.dir
