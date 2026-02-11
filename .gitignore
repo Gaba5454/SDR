@@ -1,6 +1,7 @@
-#Игнорировать папку с чужими библиотеками
+# Ignore folders
 third_party/
+.vscode
 
-#Игнорировать все выходные файлы
+# Ignore files
 *.out
 *.swp
