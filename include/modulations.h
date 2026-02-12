@@ -1,8 +1,6 @@
 // modulations.h
 
-#include <stdio.h>
-#include <math.h>
-#include "struct.h"
+#include "functions.h"
 
 /* BPSK mapper-функция реализует преобразования битов в символы
 квадратур I и Q.
@@ -13,17 +11,15 @@ size - размер выходного массива(не может отлич
 Выход:
 result - структура с двумя значениями Im и Qa. */
 
-IQComponent BPSK(int *array, int size) {
-    IQComponent result;
+void BPSK(int16_t *array, int size, IQComponent *result) {
     for(int i = 0; i < size; i++) {
         if(array[i] == 0) {
-            result.Im[i] = -1;
-            result.Qa[i] = 0;
+            result->Im[i] = -1;
+            result->Qa[i] = 0;
         }
         else {
-            result.Im[i] = 1;
-            result.Qa[i] = 0;
+            result->Im[i] = 1;
+            result->Qa[i] = 0;
         }
     }
-    return result;
 }

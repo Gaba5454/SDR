@@ -1,3 +1,5 @@
+// main.c
+
 #include "../include/mode.h"
 
 
@@ -20,20 +22,26 @@ int main(int argc, char *argv[]) {
     SoapySDRDevice *sdr = SoapySDRDevice_make(&args);
     SoapySDRKwargs_clear(&args);
 
-    printf("Choose mode: \n 1 - RX\n 2 - TX\n 3 - FullMode\n");
-    int choose = 0;
-    scanf("%d", &choose);
-
     int16_t bits[SIZE];
     generateRandomBits(bits,SIZE);
 
     IQComponent Mapped;
-    BPSK(bits,SIZE, &Mapped);
-
+    BPSK(bits, SIZE, &Mapped);
+    
     int16_t *pulsedI = pulseShaping(Mapped.Im, SIZE, SAMPLE);
     int16_t *pulsedQ = pulseShaping(Mapped.Qa, SIZE, SAMPLE);
+    
+
     int16_t *arrayForTX = acp(pulsedI, pulsedQ, SIZE * SAMPLE);
 
+    /*printf("Choose mode: \n 1 - RX\n 2 - TX\n 3 - FullMode\n");
+    int choose = 0;
+    scanf("%d", &choose);*/
+
     FullMode(sdr, arrayForTX);
+    free(pulsedI);
+    free(pulsedQ);
+    free(arrayForTX);
+
     return 0;
 }
