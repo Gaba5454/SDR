@@ -7,6 +7,13 @@
 
 
 int main() {
+    parametr.R = 3.0;
+    parametr.T = 1.0;
+    parametr.fsym = 1.0/parametr.T;
+    parametr.fd = SAMPLE * parametr.fsym;
+    parametr.Ts = 1.0/parametr.fd;
+    parametr.Ns = SIZE * SAMPLE;
+
     int bits[SIZE];
     generateRandomBits(bits,SIZE);
     printf("Generated bits:\n");
