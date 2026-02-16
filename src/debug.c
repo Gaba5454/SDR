@@ -21,7 +21,8 @@ int main() {
         printf("%d ", bits[i]);
     }
 
-    IQComponent Mapped = BPSK(bits,SIZE);
+    IQComponent Mapped;
+    BPSK(bits,SIZE, &Mapped);
     printf("\nMapper works: \n");
     for(int i = 0; i < SIZE; i++) {
         printf("%d %d ", Mapped.Im[i], Mapped.Qa[i]);
