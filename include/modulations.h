@@ -23,3 +23,7 @@ void BPSK(int16_t *array, int size, IQComponent *result) {
         }
     }
 }
+
+void QPSK(){}
+
+void QAM16(){}

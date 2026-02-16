@@ -23,7 +23,7 @@ void FullMode(SoapySDRDevice *sdr, int16_t *array){
     size_t channels[] = {0};
     
     // Настройки усилителей на RX\\TX
-    SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, channels[0], 50.0); // Чувствительность приемника
+    SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, channels[0], 40.0); // Чувствительность приемника
     SoapySDRDevice_setGain(sdr, SOAPY_SDR_TX, channels[0], -10.0);// Усиление передатчика
     
     size_t channel_count = sizeof(channels) / sizeof(channels[0]);
@@ -43,7 +43,7 @@ void FullMode(SoapySDRDevice *sdr, int16_t *array){
     size_t count = 0;
     int16_t *tx_buff = array;
     FILE *file1 = fopen("txdata.pcm", "wb");
-    fwrite(tx_buff, 2* rx_mtu * sizeof(int16_t), 1, file1);
+    fwrite(tx_buff, 2* tx_mtu * sizeof(int16_t), 1, file1);
     fclose(file1);
   
     //prepare fixed bytes in transmit buffer
@@ -73,8 +73,11 @@ void FullMode(SoapySDRDevice *sdr, int16_t *array){
         // считали буффер RX, записали его в rx_buffer
         int sr = SoapySDRDevice_readStream(sdr, rxStream, rx_buffs, rx_mtu, &flags, &timeNs, timeoutUs);
         // ЗАПИСЬ ДАННЫХ В ФАЙЛ - ВСТАВЛЕННЫЙ КОД
-
-        fwrite(rx_buffer, 2* rx_mtu * sizeof(int16_t), 1, file);
+        for(int i = 0; i < rx_mtu * 2; i++){
+        if(rx_buffer[i] > 500 || rx_buffer[i] < -500){
+            fwrite(&rx_buffer[i], sizeof(int16_t), 1, file);
+            }
+        }
         
         // Смотрим на количество считаных сэмплов, времени прихода и разницы во времени с чтением прошлого буфера
         printf("Buffer: %lu - Samples: %i, Flags: %i, Time: %lli, TimeDiff: %lli\n", buffers_read, sr, flags, timeNs, timeNs - last_time);

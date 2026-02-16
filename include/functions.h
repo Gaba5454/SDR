@@ -53,8 +53,9 @@ size - размер этих двух массивов.
 result - массив значений на TX.*/
 int16_t *acp(int16_t *arrayI, int16_t *arrayQ, int size) {
     int16_t *result = malloc(2 * (size+8) * sizeof(int16_t));
-    for(int i = 0; i < 8; i++){
+    for(int i = 0; i < 4; i++){
         result[2*i] = (barker[i]*1500) << 4;
+        result[2*i+1] = (barker[i]*1500 * 0) << 4;
     }
     for(int i = 4; i < size; i++) {
         result[2*i] = (arrayI[i] * 1500) << 4; 
@@ -63,7 +64,18 @@ int16_t *acp(int16_t *arrayI, int16_t *arrayQ, int size) {
     return result;
 }
 
-
+/* Согласованный фильтр*/
+int16_t* matchedFilter(int16_t *signal, size_t size, int16_t *pulse_arr, int sample) {
+    int16_t *result = (int16_t)calloc(size, sizeof(int16_t));
+    for(int i = 0; i < size; i++) {
+        for(int j = 0; j < sample; j++) {
+            result[i * sample + j] = signal[i] * pulse_arr[j];
+        }
+    }
+}
+/* Я подаю на вход массив rx_buffers с комплексными отсчётами,
+дальше мне нужно каждый раз перемножить по 10 элементов на 1
+каждый. После чего получить массив I и Q но уже свернутые.
 
 
 
