@@ -13,6 +13,7 @@ int main(int argc, char *argv[]) {
 
     const char *device_uri = argv[1];
 
+    
     SoapySDRKwargs args = {};
     SoapySDRKwargs_set(&args, "driver", "plutosdr");
     SoapySDRKwargs_set(&args, "uri", device_uri);
@@ -21,7 +22,7 @@ int main(int argc, char *argv[]) {
     SoapySDRKwargs_set(&args, "loopback", "0");
     SoapySDRDevice *sdr = SoapySDRDevice_make(&args);
     SoapySDRKwargs_clear(&args);
-
+    
     int16_t bits[SIZE];
     generateRandomBits(bits,SIZE);
 
@@ -32,7 +33,7 @@ int main(int argc, char *argv[]) {
     int16_t *pulsedQ = pulseShaping(Mapped.Qa, SIZE, SAMPLE);
     
 
-    int16_t *arrayForTX = acp(pulsedI, pulsedQ, SIZE * SAMPLE);
+    int32_t *arrayForTX = acp(pulsedI, pulsedQ, SIZE * SAMPLE);
 
     /*printf("Choose mode: \n 1 - RX\n 2 - TX\n 3 - FullMode\n");
     int choose = 0;

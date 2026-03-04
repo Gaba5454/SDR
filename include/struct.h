@@ -6,8 +6,9 @@
 #define SIZE 192
 #define SAMPLE 10
 #define PI 3.14
-int16_t pulse_arr[10] = {1,1,1,1,1,1,1,1,1,1};
-int16_t barker[8] = {1,1,1,-1,-1,1,-1,1};
+#define BARKER_LEN 13
+int16_t pulse_arr[SAMPLE] = {1,1,1,1,1,1,1,1,1,1};
+int16_t BARKER_13[BARKER_LEN] = {1, 1, 1, 1, 1, -1, -1, 1, 1, -1, 1, -1, 1};
 
 typedef struct  {
     double R; //= 3.0;

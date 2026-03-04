@@ -1,5 +1,5 @@
 // mode.h
-
+/*
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
 #include <stdio.h>
@@ -23,8 +23,8 @@ void FullMode(SoapySDRDevice *sdr, int16_t *array){
     size_t channels[] = {0};
     
     // Настройки усилителей на RX\\TX
-    SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, channels[0], 40.0); // Чувствительность приемника
-    SoapySDRDevice_setGain(sdr, SOAPY_SDR_TX, channels[0], -10.0);// Усиление передатчика
+    SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, channels[0], 50.0); // Чувствительность приемника
+    SoapySDRDevice_setGain(sdr, SOAPY_SDR_TX, channels[0], -20.0);// Усиление передатчика
     
     size_t channel_count = sizeof(channels) / sizeof(channels[0]);
     // Формирование потоков для передачи и приема сэмплов
@@ -35,14 +35,13 @@ void FullMode(SoapySDRDevice *sdr, int16_t *array){
     SoapySDRDevice_activateStream(sdr, txStream, 0, 0, 0); //start streaming
     //
     // Получение MTU (Maximum Transmission Unit), в нашем случае - размер буферов. 
-    size_t rx_mtu = SoapySDRDevice_getStreamMTU(sdr, rxStream);
+    const size_t rx_mtu = SoapySDRDevice_getStreamMTU(sdr, rxStream);
     size_t tx_mtu = SoapySDRDevice_getStreamMTU(sdr, txStream);
-    printf("\n\ntx_mtu = %zu\n", tx_mtu);
     // int16_t tx_buff[2*tx_mtu]; // Original
     int16_t rx_buffer[2*rx_mtu];
     size_t count = 0;
     int16_t *tx_buff = array;
-    FILE *file1 = fopen("txdata.pcm", "wb");
+    FILE *file1 = fopen("../build/txdata.pcm", "wb");
     fwrite(tx_buff, 2* tx_mtu * sizeof(int16_t), 1, file1);
     fclose(file1);
   
@@ -58,11 +57,13 @@ void FullMode(SoapySDRDevice *sdr, int16_t *array){
 
     const long  timeoutUs = 400000;
     long long last_time = 0;
+
     // Количество итерация чтения из буфера
     size_t iteration_count = 20;
 
+    int matched_len = (SIZE * SAMPLE) + SAMPLE - 1;
     // Начинается работа с получением и отправкой сэмплов
-    FILE *file = fopen("rxdata.pcm", "wb");
+    FILE *file = fopen("../build/rxdata.pcm", "wb");
 
     for (size_t buffers_read = 0; buffers_read < iteration_count; buffers_read++) {
         
@@ -72,13 +73,69 @@ void FullMode(SoapySDRDevice *sdr, int16_t *array){
         
         // считали буффер RX, записали его в rx_buffer
         int sr = SoapySDRDevice_readStream(sdr, rxStream, rx_buffs, rx_mtu, &flags, &timeNs, timeoutUs);
-        // ЗАПИСЬ ДАННЫХ В ФАЙЛ - ВСТАВЛЕННЫЙ КОД
-        for(int i = 0; i < rx_mtu * 2; i++){
-        if(rx_buffer[i] > 500 || rx_buffer[i] < -500){
+
+        int16_t *deinterleaved_i = malloc(SIZE * SAMPLE * sizeof(int16_t));
+        int16_t *deinterleaved_q = malloc(SIZE * SAMPLE * sizeof(int16_t));
+
+        for (int idx = 0; idx < SIZE * SAMPLE; idx++) {
+            deinterleaved_i[idx] = rx_buffer[2 * idx];     // I: 0, 2, 4...
+            deinterleaved_q[idx] = rx_buffer[2 * idx + 1]; // Q: 1, 3, 5...
+        }
+
+        int32_t *out_i = calloc(matched_len, sizeof(int32_t));
+        int32_t *out_q = calloc(matched_len, sizeof(int32_t));
+        
+        printf("sr=%d, first 5 rx_buffer: %d %d %d %d %d\n", 
+       sr, rx_buffer[0], rx_buffer[1], rx_buffer[2], rx_buffer[3], rx_buffer[4]);
+        printf("first 5 deinterleaved_i: %d %d %d %d %d\n",
+       deinterleaved_i[0], deinterleaved_i[1], deinterleaved_i[2], deinterleaved_i[3], deinterleaved_i[4]);
+        matchedFilter(deinterleaved_i, (SIZE * SAMPLE), pulse_arr, SAMPLE, out_i);
+        matchedFilter(deinterleaved_q, (SIZE * SAMPLE), pulse_arr, SAMPLE, out_q);
+        // Размер после децимации: один отсчёт на символ
+int decimated_size = SIZE;  // 192 символа
+int16_t *decim_i = malloc(decimated_size * sizeof(int16_t));
+int16_t *decim_q = malloc(decimated_size * sizeof(int16_t));
+
+// Оптимальная точка выборки: середина символа (SAMPLE/2) + задержка фильтра
+int offset = 1;  // 5 для SAMPLE=10
+
+for (int sym = 0; sym < SIZE; sym++) {
+    // Индекс в matched filter output: начало символа + смещение
+    int idx = sym * SAMPLE + offset;
+    
+    // Проверка границ
+    if (idx < matched_len) {
+        decim_i[sym] = (int16_t)(out_i[idx] / 10);  // Масштабирование
+        decim_q[sym] = (int16_t)(out_q[idx] / 10);
+    } else {
+        decim_i[sym] = 0;  // Заполнение нулями при выходе за границы
+        decim_q[sym] = 0;
+    }
+}
+
+for (int i = 0; i < decimated_size; i++) {
+    fwrite(&decim_i[i], sizeof(int16_t), 1, file);
+    fwrite(&decim_q[i], sizeof(int16_t), 1, file);
+}
+
+free(decim_i);
+free(decim_q);
+
+        /*for(int i = 0; i < matched_len; i++){
+                int16_t out_i_16 = (int16_t)(out_i[i]);  // Масштабирование
+                int16_t out_q_16 = (int16_t)(out_q[i]);
+                fwrite(&out_i_16, sizeof(int16_t), 1, file);
+                fwrite(&out_q_16, sizeof(int16_t), 1, file);
+        }
+        free(deinterleaved_i);
+        free(deinterleaved_q);*/
+
+        /*for(int i = 0; i < rx_mtu*2; i++){
+        if(rx_buffer[i] > 500 || rx_buffer[i] < -500) {
             fwrite(&rx_buffer[i], sizeof(int16_t), 1, file);
             }
-        }
-        
+        }*/
+/*
         // Смотрим на количество считаных сэмплов, времени прихода и разницы во времени с чтением прошлого буфера
         printf("Buffer: %lu - Samples: %i, Flags: %i, Time: %lli, TimeDiff: %lli\n", buffers_read, sr, flags, timeNs, timeNs - last_time);
         last_time = timeNs;
@@ -89,7 +146,6 @@ void FullMode(SoapySDRDevice *sdr, int16_t *array){
         
         // Здесь отправляем наш tx_buff массив
         void *tx_buffs[] = {tx_buff};
-        printf("\n");
         printf("%d\n", 1920 * buffers_read * 2);
         
         for(size_t i = 0; i < 8; i++) {
@@ -100,7 +156,7 @@ void FullMode(SoapySDRDevice *sdr, int16_t *array){
             flags = SOAPY_SDR_HAS_TIME;
             int st = SoapySDRDevice_writeStream(sdr, txStream, (const void * const*)tx_buffs, tx_mtu, &flags, tx_time, timeoutUs);
     }
-    if (file) fclose(file);
+    fclose(file);
     //stop streaming
     SoapySDRDevice_deactivateStream(sdr, rxStream, 0, 0);
     SoapySDRDevice_deactivateStream(sdr, txStream, 0, 0);
@@ -111,4 +167,201 @@ void FullMode(SoapySDRDevice *sdr, int16_t *array){
 
     //cleanup device handle
     SoapySDRDevice_unmake(sdr);
+}
+*/
+// mode.h
+
+#include <SoapySDR/Device.h>
+#include <SoapySDR/Formats.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <time.h>
+#include "modulations.h"
+
+// ============================================================================
+// Структура для комплексных чисел (если понадобится в будущем)
+// ============================================================================
+typedef struct {
+    float re;
+    float im;
+} complex_float;
+
+
+void FullMode(SoapySDRDevice *sdr, int16_t *tx_array) {
+    
+    // === Настройка SDR ===
+    int sample_rate = 1e6;
+    int carrier_freq = 800e6;
+    
+    SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_RX, 0, sample_rate);
+    SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_RX, 0, carrier_freq, NULL);
+    SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_TX, 0, sample_rate);
+    SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_TX, 0, carrier_freq, NULL);
+    
+    size_t channels[] = {0};
+    SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, channels[0], 40.0);  // Усиление RX
+    SoapySDRDevice_setGain(sdr, SOAPY_SDR_TX, channels[0], -20.0); // Усиление TX
+    
+    size_t channel_count = sizeof(channels) / sizeof(channels[0]);
+    SoapySDRStream *rxStream = SoapySDRDevice_setupStream(sdr, SOAPY_SDR_RX, SOAPY_SDR_CS16, channels, channel_count, NULL);
+    SoapySDRStream *txStream = SoapySDRDevice_setupStream(sdr, SOAPY_SDR_TX, SOAPY_SDR_CS16, channels, channel_count, NULL);
+    
+    SoapySDRDevice_activateStream(sdr, rxStream, 0, 0, 0);
+    SoapySDRDevice_activateStream(sdr, txStream, 0, 0, 0);
+    
+    // === Получение размеров буферов ===
+    const size_t rx_mtu = SoapySDRDevice_getStreamMTU(sdr, rxStream);
+    const size_t tx_mtu = SoapySDRDevice_getStreamMTU(sdr, txStream);
+    printf("\ntx_mtu = %zu\nrx_mtu = %zu\n", tx_mtu, rx_mtu);
+    
+    int16_t rx_buffer[2 * rx_mtu];  // Interleaved: [I0, Q0, I1, Q1, ...]
+    int16_t *tx_buff = tx_array;
+    
+    // Сохранение TX-данных для отладки
+    FILE *file1 = fopen("../build/txdata.pcm", "wb");
+    fwrite(tx_buff, 2 * tx_mtu * sizeof(int16_t), 1, file1);
+    fclose(file1);
+    
+    // Подготовка преамбулы для TX
+    /*for(size_t i = 0; i < 2; i++) {
+        tx_buff[0 + i] = 0xffff;
+        tx_buff[10 + i] = 0xffff;
+    }*/
+    
+    const long timeoutUs = 400000;
+    long long last_time = 0;
+    size_t iteration_count = 20;
+    
+    // === Файл для RX-данных ===
+    FILE *file = fopen("../build/rxdata.pcm", "wb");
+    if (file == NULL) {
+        fprintf(stderr, "Ошибка: не удалось открыть rxdata.pcm\n");
+        return;
+    }
+    
+    // === Параметры обработки ===
+    int matched_len = (SIZE * SAMPLE) + SAMPLE - 1;
+    int scale_divisor = 2000;  // Подбирается экспериментально
+    
+    FILE *file3 = fopen("../build/syroi_rxdata.pcm", "wb");
+
+    // === ГЛАВНЫЙ ЦИКЛ ===
+    for (size_t buffers_read = 0; buffers_read < iteration_count; buffers_read++) {
+        
+        void *rx_buffs[] = {rx_buffer};
+        
+        fwrite(&rx_buffer, 2 * tx_mtu * sizeof(int16_t), 1, file3);
+        
+
+        int flags;
+        long long timeNs;
+        
+        // 1. Чтение из SDR
+        int sr = SoapySDRDevice_readStream(sdr, rxStream, rx_buffs, rx_mtu, &flags, &timeNs, timeoutUs);
+        if (sr <= 0) {
+            printf("RX error: sr=%d, пропускаем буфер %lu\n", sr, buffers_read);
+            continue;
+        }
+        
+        // 2. Проверка энергии сигнала (диагностика)
+        int32_t rx_energy = 0;
+        for (int i = 0; i < sr && i < 100; i++) {
+            rx_energy += abs(rx_buffer[i]);
+        }
+        printf("Buffer %lu: sr=%d, energy=%ld\n", buffers_read, sr, rx_energy);
+        
+        // 3. Деинтерливинг: разделяем I/Q из interleaved буфера
+        int16_t *deinterleaved_i = malloc(SIZE * SAMPLE * sizeof(int16_t));
+        int16_t *deinterleaved_q = malloc(SIZE * SAMPLE * sizeof(int16_t));
+        if (deinterleaved_i == NULL || deinterleaved_q == NULL) {
+            fprintf(stderr, "Ошибка выделения памяти под deinterleaved\n");
+            continue;
+        }
+        
+        int samples_to_process = (sr < SIZE * SAMPLE) ? sr : SIZE * SAMPLE;
+        for (int idx = 0; idx < samples_to_process; idx++) {
+            deinterleaved_i[idx] = rx_buffer[2 * idx];
+            deinterleaved_q[idx] = rx_buffer[2 * idx + 1];
+        }
+        // Заполняем остаток нулями
+        for (int idx = samples_to_process; idx < SIZE * SAMPLE; idx++) {
+            deinterleaved_i[idx] = 0;
+            deinterleaved_q[idx] = 0;
+        }
+        
+        // 4. Matched Filter
+        int32_t *out_i = calloc(matched_len, sizeof(int32_t));
+        int32_t *out_q = calloc(matched_len, sizeof(int32_t));
+
+        matchedFilter(deinterleaved_i, SIZE * SAMPLE, pulse_arr, SAMPLE, out_i);
+        matchedFilter(deinterleaved_q, SIZE * SAMPLE, pulse_arr, SAMPLE, out_q);
+        
+        // 5. TED: Поиск оптимальных точек выборки
+        int *optimal_indices = malloc(SIZE * sizeof(int));
+        
+        int found_symbols = findOptimalOffset(out_i, out_q, matched_len, SAMPLE, SIZE, optimal_indices);
+        
+        // 6. Выборка символов по найденным индексам
+        int16_t *decoded_i = malloc(found_symbols * sizeof(int16_t));
+        int16_t *decoded_q = malloc(found_symbols * sizeof(int16_t));
+        
+        for (int sym = 0; sym < found_symbols; sym++) {
+            int idx = optimal_indices[sym];
+            if (idx >= 0 && idx < matched_len) {
+                decoded_i[sym] = (int16_t)(out_i[idx] / scale_divisor);
+                decoded_q[sym] = (int16_t)(out_q[idx] / scale_divisor);
+            } else {
+                decoded_i[sym] = 0;
+                decoded_q[sym] = 0;
+            }
+        }
+        
+        // 7. Запись в файл
+        for (int i = 0; i < found_symbols; i++) {
+            fwrite(&decoded_i[i], sizeof(int16_t), 1, file);
+            fwrite(&decoded_q[i], sizeof(int16_t), 1, file);
+        }
+        
+        
+        //Очистка памяти
+        free(optimal_indices);
+        free(decoded_i);
+        free(decoded_q);
+        free(out_i);
+        free(out_q);
+        free(deinterleaved_i);
+        free(deinterleaved_q);
+        
+        //Лог времени
+        printf("Buffer: %lu - TimeDiff: %lli ns\n\n", buffers_read, timeNs - last_time);
+        last_time = timeNs;
+        
+        //Отправка TX
+        long long tx_time = timeNs + (6 * 1000 * 1000);
+        void *tx_buffs[] = {tx_buff};
+        
+        for(size_t i = 0; i < 8; i++) {
+            uint8_t tx_time_byte = (tx_time >> (i * 8)) & 0xff;
+            tx_buff[2 + i] = tx_time_byte << 4;
+        }
+        
+        flags = SOAPY_SDR_HAS_TIME;
+        int st = SoapySDRDevice_writeStream(sdr, txStream, (const void * const*)tx_buffs, 
+                                           tx_mtu, &flags, tx_time, timeoutUs);
+        if (st < 0) {
+            printf("TX error: %d\n", st);
+        }
+    }
+    fclose(file3);
+    fclose(file);
+    
+    // === Очистка SDR ===
+    SoapySDRDevice_deactivateStream(sdr, rxStream, 0, 0);
+    SoapySDRDevice_deactivateStream(sdr, txStream, 0, 0);
+    SoapySDRDevice_closeStream(sdr, rxStream);
+    SoapySDRDevice_closeStream(sdr, txStream);
+    SoapySDRDevice_unmake(sdr);
+    
+    printf("FullMode завершена успешно\n");
 }
