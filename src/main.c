@@ -23,26 +23,34 @@ int main(int argc, char *argv[]) {
     SoapySDRDevice *sdr = SoapySDRDevice_make(&args);
     SoapySDRKwargs_clear(&args);
     
+    // Генерация битов
     int16_t bits[SIZE];
     generateRandomBits(bits,SIZE);
 
+    // Преобразование битов в символы
     IQComponent Mapped;
     BPSK(bits, SIZE, &Mapped);
     
-    int16_t *pulsedI = pulseShaping(Mapped.Im, SIZE, SAMPLE);
-    int16_t *pulsedQ = pulseShaping(Mapped.Qa, SIZE, SAMPLE);
-    
+    // Апсемплинг
+    int16_t *upSampledI = upSampling(Mapped.Im, SIZE, SAMPLE);
+    int16_t *upSampledQ = upSampling(Mapped.Qa, SIZE, SAMPLE);
 
-    int32_t *arrayForTX = acp(pulsedI, pulsedQ, SIZE * SAMPLE);
+    // Свертка с импульсной характеристикой
+    int16_t convI[SIZE*SAMPLE+SAMPLE-1];
+    int16_t convQ[SIZE*SAMPLE+SAMPLE-1];
+    convolvePulse(upSampledI, SIZE*SAMPLE, pulse_arr, SAMPLE, convI);
+    convolvePulse(upSampledQ, SIZE*SAMPLE, pulse_arr, SAMPLE, convQ);
+
+    // Формирование массива на передачу
+    int16_t *arrayForTX = acp(convI, convQ, SIZE * SAMPLE);
 
     /*printf("Choose mode: \n 1 - RX\n 2 - TX\n 3 - FullMode\n");
     int choose = 0;
     scanf("%d", &choose);*/
 
     FullMode(sdr, arrayForTX);
-    free(pulsedI);
-    free(pulsedQ);
     free(arrayForTX);
-
+    free(upSampledI);
+    free(upSampledQ);
     return 0;
 }

@@ -21,21 +21,39 @@ int main() {
     FILE *file1 = fopen("txdata.pcm", "wb");
     int matched_len = (SIZE * SAMPLE * 2) + SAMPLE - 1;
     for(int iter = 0; iter < 1; iter++){
+
         int16_t bits[SIZE];
         generateRandomBits(bits,SIZE);
 
-
-        IQComponent Mapp;
-        BPSK(bits,SIZE, &Mapp);
-
-        int16_t *pulseI = pulseShaping(Mapp.Im, SIZE, SAMPLE);
-        int16_t *pulseQ = pulseShaping(Mapp.Qa, SIZE, SAMPLE);
-
-        int16_t *arrayForTX = acp(pulseI, pulseQ, SIZE * SAMPLE);
-        for(int i = 0; i < SIZE * SAMPLE * 2; i++) { 
-            fwrite(&arrayForTX[i], sizeof(int16_t), 1, file1);  
+        IQComponent Mapped;
+        BPSK(bits, SIZE, &Mapped);
+    
+        int16_t *upSampledI = upSampling(Mapped.Im, SIZE, SAMPLE);
+        int16_t *upSampledQ = upSampling(Mapped.Qa, SIZE, SAMPLE);
+        //printf("\n\n I \n");
+        for(int i=0; i < SIZE * SAMPLE; i++) { 
+            //printf("%d ", upSampledI[i]);
         }
-  
+        //printf("\n\n Q \n");
+        for(int i = 0; i < SIZE * SAMPLE; i++) { 
+            //printf("%d ", upSampledQ[i]);
+        }
+        int16_t convI[SIZE*SAMPLE+SAMPLE-1];
+        int16_t convQ[SIZE*SAMPLE+SAMPLE-1];
+
+        convolvePulse(upSampledI, SIZE*SAMPLE, pulse_arr, SAMPLE, convI);
+        convolvePulse(upSampledQ, SIZE*SAMPLE, pulse_arr, SAMPLE, convQ);
+        
+        int16_t *arrayForTX = acp(convI, convQ, SIZE*SAMPLE+SAMPLE-1);
+        int counter = 0;
+        for(int i = 0; i < ((SIZE * SAMPLE) * 2); i++) { 
+            printf("%d ", arrayForTX[i]);
+            counter += 1;
+            //fwrite(&arrayForTX[i], sizeof(int16_t), 1, file1);  
+        }
+    }
+    
+  /*
 int16_t *deinterleaved_i = malloc(SIZE * SAMPLE * sizeof(int16_t));
 int16_t *deinterleaved_q = malloc(SIZE * SAMPLE * sizeof(int16_t));
 
@@ -64,7 +82,7 @@ matchedFilter(deinterleaved_q, SIZE * SAMPLE, pulse_arr, SAMPLE, out_q);
         free(deinterleaved_q);
     }
     fclose(file);
-    fclose(file1);  
+    fclose(file1);*/  
     return 0;
 }
 /*

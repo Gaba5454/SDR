@@ -26,23 +26,33 @@ size - размер исходного массива.
 sample - во сколько раз нужно увеличить массив.
 Выход:
 result - массив после апсемплинга и свертки.*/
-
-int16_t *pulseShaping(int16_t *array, int size, int sample) {
+int16_t *upSampling(int16_t *array, int size, int sample) {
     int new_size = size * sample;
-    int16_t *result = malloc(new_size * sizeof(int16_t));
+    int16_t *result = calloc(new_size, sizeof(int16_t));
     
-    for(int i = 0; i < size; i++) {
-        for(int j = 0; j < sample; j++) {
-            if(i < 13){
-                result[i * sample + j] = BARKER_13[i];
-            }
-            else {
-                result[i * sample + j] = array[i] * pulse_arr[j];
-            }
+    for(int i = 0; i < size; i++){
+        for(int j = 0; j < sample; j++){
+            result[i*sample] = array[i];
         }
     }
     return result;
 }
+
+void convolvePulse(int16_t *a, int len_a, int16_t *b, int len_b, int16_t* output) {
+    int result_len = len_a + len_b - 1;
+    
+    for (int i = 0; i < result_len; i++) {
+        int16_t sum = 0; 
+        for (int j = 0; j < len_b; j++) {
+            int idx = i - j;
+            if (idx >= 0 && idx < len_a) {
+                sum += (int16_t)a[idx] * (int16_t)b[j];
+            }
+        }
+        output[i] = sum;
+    }
+}
+
 // Мне очень нравится эта функция, она идеальна.
 
 /* Кадровая синхронизация использующая последовательность Баркера
@@ -64,42 +74,10 @@ int16_t *acp(int16_t *arrayI, int16_t *arrayQ, int size) {
     }
     return result;
 }
-/*int16_t *acp(int16_t *arrayI, int16_t *arrayQ, int size) {
-    
-
-    
-    // Общий размер: преамбула (13 символов) + полезные данные (size символов)
-    int total_symbols = BARKER_LEN + size;
-    
-    // Выделяем память под интерливинговый массив: 2 компонента (I,Q) на символ
-    int16_t *result = malloc(2 * total_symbols * sizeof(int16_t));
-    if (result == NULL) {
-        fprintf(stderr, "Ошибка: не удалось выделить память в acp()\n");
-        return NULL;
-    }
-    
-    // === 1. Записываем код Баркера в начало (символы 0..12) ===
-    for (int i = 0; i < BARKER_LEN; i++) {
-        // I-канал: значение Баркера × масштаб × сдвиг для Pluto
-        result[2 * i] = (BARKER_13[i] * 1500) << 4;
-        // Q-канал: для BPSK = 0 (но сохраняем формат для совместимости)
-        result[2 * i + 1] = (BARKER_13[i] * 1500) << 4;  // Или (BARKER_13[i] * 0) << 4 если нужно
-    }
-    
-    // === 2. Записываем полезные данные после преамбулы (символы 13..13+size-1) ===
-    for (int i = 0; i < size; i++) {
-        int sym_idx = BARKER_LEN + i;  // Индекс символа в result с учётом преамбулы
-        
-        result[2 * sym_idx]     = (arrayI[i] * 1500) << 4;  // I-компонента
-        result[2 * sym_idx + 1] = (arrayQ[i] * 1500) << 4;  // Q-компонента
-    }
-    
-    return result;
-}*/
 
 
 /* Согласованный фильтр*/
-void matchedFilter(int16_t *a, int len_a, int16_t *b, int len_b, int32_t* output) {
+void convolveMatched(int16_t *a, int len_a, int16_t *b, int len_b, int32_t* output) {
     int result_len = len_a + len_b - 1;
     
     for (int i = 0; i < result_len; i++) {
@@ -144,24 +122,6 @@ int findOptimalOffset(int32_t *signal_i, int32_t *signal_q, int signal_len,
     }
     return found;
 }
-
-    /*int16_t *c = (int16_t*)calloc(size, sizeof(int16_t)); // зануляем выделенную память
-    if (c == NULL) {
-        fprintf(stderr, "Ошибка выделения памяти\n");
-        return NULL;
-    }
-
-    for (int i = 0; i < len_a; i++) {
-        for (int j = 0; j < len_b; j++) {
-            c[i] += a[i+j] * b[j];
-        }
-    }
-    return c;
-}*/
-
-/* Я подаю на вход массив rx_buffers с комплексными отсчётами,
-дальше мне нужно каждый раз перемножить по 10 элементов на 1
-каждый. После чего получить массив I и Q но уже свернутые.
 
 
 

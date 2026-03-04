@@ -219,9 +219,9 @@ void FullMode(SoapySDRDevice *sdr, int16_t *tx_array) {
     int16_t *tx_buff = tx_array;
     
     // Сохранение TX-данных для отладки
-    FILE *file1 = fopen("../build/txdata.pcm", "wb");
-    fwrite(tx_buff, 2 * tx_mtu * sizeof(int16_t), 1, file1);
-    fclose(file1);
+    FILE *filetx = fopen("../build/txdata.pcm", "wb");
+    fwrite(tx_buff, 2 * tx_mtu * sizeof(int16_t), 1, filetx);
+    fclose(filetx);
     
     // Подготовка преамбулы для TX
     /*for(size_t i = 0; i < 2; i++) {
@@ -233,25 +233,22 @@ void FullMode(SoapySDRDevice *sdr, int16_t *tx_array) {
     long long last_time = 0;
     size_t iteration_count = 20;
     
-    // === Файл для RX-данных ===
-    FILE *file = fopen("../build/rxdata.pcm", "wb");
-    if (file == NULL) {
-        fprintf(stderr, "Ошибка: не удалось открыть rxdata.pcm\n");
-        return;
-    }
-    
-    // === Параметры обработки ===
-    int matched_len = (SIZE * SAMPLE) + SAMPLE - 1;
-    int scale_divisor = 2000;  // Подбирается экспериментально
-    
-    FILE *file3 = fopen("../build/syroi_rxdata.pcm", "wb");
+    // Файлы для RX-данных
+    FILE *filerx = fopen("../build/rxdata.pcm", "wb");
+    FILE *filerx_raw = fopen("../build/raw_rxdata.pcm", "wb");
 
-    // === ГЛАВНЫЙ ЦИКЛ ===
+    int matched_len = SIZE * SAMPLE + SAMPLE - 1;  // длина после свёртки
+    int32_t *matched_i = malloc(matched_len * sizeof(int32_t));
+    int32_t *matched_q = malloc(matched_len * sizeof(int32_t));
+    int *optimal_indices = malloc(SIZE * sizeof(int));
+    
+    
+    // Цикл обработки
     for (size_t buffers_read = 0; buffers_read < iteration_count; buffers_read++) {
         
         void *rx_buffs[] = {rx_buffer};
         
-        fwrite(&rx_buffer, 2 * tx_mtu * sizeof(int16_t), 1, file3);
+        fwrite(&rx_buffer, 2 * tx_mtu * sizeof(int16_t), 1, filerx_raw);
         
 
         int flags;
@@ -259,79 +256,26 @@ void FullMode(SoapySDRDevice *sdr, int16_t *tx_array) {
         
         // 1. Чтение из SDR
         int sr = SoapySDRDevice_readStream(sdr, rxStream, rx_buffs, rx_mtu, &flags, &timeNs, timeoutUs);
-        if (sr <= 0) {
-            printf("RX error: sr=%d, пропускаем буфер %lu\n", sr, buffers_read);
-            continue;
-        }
         
-        // 2. Проверка энергии сигнала (диагностика)
-        int32_t rx_energy = 0;
-        for (int i = 0; i < sr && i < 100; i++) {
-            rx_energy += abs(rx_buffer[i]);
-        }
-        printf("Buffer %lu: sr=%d, energy=%ld\n", buffers_read, sr, rx_energy);
-        
-        // 3. Деинтерливинг: разделяем I/Q из interleaved буфера
-        int16_t *deinterleaved_i = malloc(SIZE * SAMPLE * sizeof(int16_t));
-        int16_t *deinterleaved_q = malloc(SIZE * SAMPLE * sizeof(int16_t));
-        if (deinterleaved_i == NULL || deinterleaved_q == NULL) {
-            fprintf(stderr, "Ошибка выделения памяти под deinterleaved\n");
-            continue;
-        }
-        
-        int samples_to_process = (sr < SIZE * SAMPLE) ? sr : SIZE * SAMPLE;
-        for (int idx = 0; idx < samples_to_process; idx++) {
-            deinterleaved_i[idx] = rx_buffer[2 * idx];
-            deinterleaved_q[idx] = rx_buffer[2 * idx + 1];
-        }
-        // Заполняем остаток нулями
-        for (int idx = samples_to_process; idx < SIZE * SAMPLE; idx++) {
-            deinterleaved_i[idx] = 0;
-            deinterleaved_q[idx] = 0;
-        }
-        
-        // 4. Matched Filter
-        int32_t *out_i = calloc(matched_len, sizeof(int32_t));
-        int32_t *out_q = calloc(matched_len, sizeof(int32_t));
+        // 2. Matched Filter
+        int32_t rxData[(SIZE * SAMPLE + SAMPLE - 1) * 2];
+        convolveMatched(rx_buffer, SIZE * SAMPLE, pulse_arr, SAMPLE, rxData);
 
-        matchedFilter(deinterleaved_i, SIZE * SAMPLE, pulse_arr, SAMPLE, out_i);
-        matchedFilter(deinterleaved_q, SIZE * SAMPLE, pulse_arr, SAMPLE, out_q);
-        
-        // 5. TED: Поиск оптимальных точек выборки
+        // 3. TED: Поиск оптимальных точек выборки
         int *optimal_indices = malloc(SIZE * sizeof(int));
         
-        int found_symbols = findOptimalOffset(out_i, out_q, matched_len, SAMPLE, SIZE, optimal_indices);
+        int found_symbols = findOptimalOffset(rxData, matched_len, SAMPLE, SIZE, optimal_indices);
         
-        // 6. Выборка символов по найденным индексам
-        int16_t *decoded_i = malloc(found_symbols * sizeof(int16_t));
-        int16_t *decoded_q = malloc(found_symbols * sizeof(int16_t));
         
-        for (int sym = 0; sym < found_symbols; sym++) {
-            int idx = optimal_indices[sym];
-            if (idx >= 0 && idx < matched_len) {
-                decoded_i[sym] = (int16_t)(out_i[idx] / scale_divisor);
-                decoded_q[sym] = (int16_t)(out_q[idx] / scale_divisor);
-            } else {
-                decoded_i[sym] = 0;
-                decoded_q[sym] = 0;
-            }
-        }
-        
-        // 7. Запись в файл
+        /* 7. Запись в файл
         for (int i = 0; i < found_symbols; i++) {
             fwrite(&decoded_i[i], sizeof(int16_t), 1, file);
             fwrite(&decoded_q[i], sizeof(int16_t), 1, file);
-        }
+        }*/
         
         
         //Очистка памяти
-        free(optimal_indices);
-        free(decoded_i);
-        free(decoded_q);
-        free(out_i);
-        free(out_q);
-        free(deinterleaved_i);
-        free(deinterleaved_q);
+        
         
         //Лог времени
         printf("Buffer: %lu - TimeDiff: %lli ns\n\n", buffers_read, timeNs - last_time);
@@ -353,8 +297,8 @@ void FullMode(SoapySDRDevice *sdr, int16_t *tx_array) {
             printf("TX error: %d\n", st);
         }
     }
-    fclose(file3);
-    fclose(file);
+    fclose(filerx);
+    fclose(filerx_raw);
     
     // === Очистка SDR ===
     SoapySDRDevice_deactivateStream(sdr, rxStream, 0, 0);
