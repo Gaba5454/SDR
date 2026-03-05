@@ -215,7 +215,7 @@ void FullMode(SoapySDRDevice *sdr, int16_t *tx_array) {
     const size_t tx_mtu = SoapySDRDevice_getStreamMTU(sdr, txStream);
     printf("\ntx_mtu = %zu\nrx_mtu = %zu\n", tx_mtu, rx_mtu);
     
-    int16_t rx_buffer[2 * rx_mtu];  // Interleaved: [I0, Q0, I1, Q1, ...]
+    int32_t rx_buffer[2 * rx_mtu];  // Interleaved: [I0, Q0, I1, Q1, ...]
     int16_t *tx_buff = tx_array;
     
     // Сохранение TX-данных для отладки
@@ -236,31 +236,43 @@ void FullMode(SoapySDRDevice *sdr, int16_t *tx_array) {
     // Файлы для RX-данных
     FILE *filerx = fopen("../build/rxdata.pcm", "wb");
     FILE *filerx_raw = fopen("../build/raw_rxdata.pcm", "wb");
-
-    int matched_len = SIZE * SAMPLE + SAMPLE - 1;  // длина после свёртки
-    int32_t *matched_i = malloc(matched_len * sizeof(int32_t));
-    int32_t *matched_q = malloc(matched_len * sizeof(int32_t));
-    int *optimal_indices = malloc(SIZE * sizeof(int));
-    
     
     // Цикл обработки
     for (size_t buffers_read = 0; buffers_read < iteration_count; buffers_read++) {
         
         void *rx_buffs[] = {rx_buffer};
         
-        fwrite(&rx_buffer, 2 * tx_mtu * sizeof(int16_t), 1, filerx_raw);
         
-
         int flags;
         long long timeNs;
         
         // 1. Чтение из SDR
         int sr = SoapySDRDevice_readStream(sdr, rxStream, rx_buffs, rx_mtu, &flags, &timeNs, timeoutUs);
+        fwrite(rx_buffer, sizeof(int16_t), 2 * sr, filerx_raw);
         
-        // 2. Matched Filter
-        int32_t rxData[(SIZE * SAMPLE + SAMPLE - 1) * 2];
-        convolveMatched(rx_buffer, SIZE * SAMPLE, pulse_arr, SAMPLE, rxData);
+        int16_t *rxDataI = calloc(sr, sizeof(int16_t));
+        int16_t *rxDataQ = calloc(sr, sizeof(int16_t));
+        for(int i = 0; i < sr; i++){
+            rxDataI[i] = rx_buffer[i*2];
+            rxDataQ[i] = rx_buffer[i*2+1];
+        }
 
+        // 2. Matched Filter
+        int matched_len = sr + SAMPLE - 1;
+        int32_t *matchRxDataI32 = calloc(matched_len, sizeof(int32_t));
+        int32_t *matchRxDataQ32 = calloc(matched_len, sizeof(int32_t));
+        convolveMatched(rxDataI, sr, pulse_arr, SAMPLE, matchRxDataI32);
+        convolveMatched(rxDataQ, sr, pulse_arr, SAMPLE, matchRxDataQ32);
+
+        int16_t scale = 1000;
+
+        for(int i = 0; i < matched_len; i++){
+            int16_t matchRxDataI16 = (int16_t)(matchRxDataI32[i] / scale);
+            fwrite(&matchRxDataI16, sizeof(int16_t), 1, filerx);
+            int16_t matchRxDataQ16 = (int16_t)(matchRxDataQ32[i] / scale);
+            fwrite(&matchRxDataQ16, sizeof(int16_t), 1, filerx);
+        }
+        /*
         // 3. TED: Поиск оптимальных точек выборки
         int *optimal_indices = malloc(SIZE * sizeof(int));
         
@@ -296,6 +308,10 @@ void FullMode(SoapySDRDevice *sdr, int16_t *tx_array) {
         if (st < 0) {
             printf("TX error: %d\n", st);
         }
+        free(rxDataI);
+        free(rxDataQ);
+        free(matchRxDataI32);
+        free(matchRxDataQ32);
     }
     fclose(filerx);
     fclose(filerx_raw);
