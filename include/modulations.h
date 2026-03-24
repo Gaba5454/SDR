@@ -25,7 +25,18 @@ void BPSK(int16_t *array, int size, IQComponent *result) {
 }
 
 void QPSK(int16_t *array, int size, IQComponent *result){
-    
+    for(int i = 0; i < size; i++) {
+        if(array[i] == 0) {
+            result->Im[i] = -1;
+            result->Qa[i] = 0;
+        }
+        else {
+            result->Im[i] = 1;
+            result->Qa[i] = 0;
+        }
+    }
 }
 
-void QAM16(){}
+void QAM16(int16_t *array, int size, IQComponent *result){
+
+}

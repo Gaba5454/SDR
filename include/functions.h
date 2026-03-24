@@ -4,14 +4,13 @@
 #include <math.h>
 #include "struct.h"
 #include <stdlib.h>
-
+ 
 /* Функция генерации случайной полседовательности 1 и 0.
 Параметры:
 array - массив в который залезут эти нолики и единички.
 size - размер этого массива, сколько единичек и ноликов 
 поместятся в этот массив. */
 void generateRandomBits(int16_t *array, int size) {
-    srand(time(NULL));
     for(int i = 0; i < size; i++) {
         array[i] = rand() % 2;
     }
@@ -32,7 +31,7 @@ int16_t *upSampling(int16_t *array, int size, int sample) {
     
     for(int i = 0; i < size; i++){
         for(int j = 0; j < sample; j++){
-            result[i*sample] = array[i];
+            result[i*SAMPLE] = array[i];
         }
     }
     return result;
@@ -50,6 +49,7 @@ void convolvePulse(int16_t *a, int len_a, int16_t *b, int len_b, int16_t* output
             }
         }
         output[i] = sum;
+
     }
 }
 
@@ -65,12 +65,13 @@ arrayQ - массив значений квадратуры Q.
 size - размер этих двух массивов.
 Выход:
 result - массив значений на TX.*/
+
 int16_t *acp(int16_t *arrayI, int16_t *arrayQ, int size) {
     int16_t *result = malloc(2 * size * sizeof(int16_t));
 
     for(int i = 0; i < size; i++) {
         result[2*i] = (arrayI[i] * 1500) << 4; 
-        result[2*i+1] = (arrayQ[i] * 1500) << 4;
+        result[2*i+1] = (arrayQ[i] * 1500*0) << 4;
     }
     return result;
 }
@@ -93,43 +94,16 @@ void convolveMatched(int16_t *a, int len_a, int16_t *b, int len_b, int32_t* outp
 }
 
 /* 
- * Gardner Timing Error Detector с PLL-фильтром
- * Возвращает массив индексов оптимальных точек выборки
- * matched: входной массив после matched filter (комплексный)
- * matched_len: длина входного массива
- * samples_per_symbol: SAMPLE (количество отсчётов на символ)
- * out_len: выходной параметр - длина возвращаемого массива
- */
-int findOptimalOffset(int32_t *signal_i, int32_t *signal_q, int signal_len, 
-                      int samples_per_symbol, int symbols_count, int *out_indices) {
-    
-    int found = 0;
-    for (int sym = 0; sym < symbols_count; sym++) {
-        int start = sym * samples_per_symbol;
-        int end = start + samples_per_symbol;
-        if (end > signal_len) break;
-        
-        int best_idx = start;
-        int32_t max_energy = 0;
-        for (int idx = start; idx < end; idx++) {
-            int32_t energy = signal_i[idx] * signal_i[idx] + signal_q[idx] * signal_q[idx];
-            if (energy > max_energy) {
-                max_energy = energy;
-                best_idx = idx;
-            }
-        }
-        out_indices[found++] = best_idx;
+Демаппер BPSK
+Простое решение по знаку вещественной части (для BPSK этого достаточно)
+*/
+void demap_bpsk(int32_t *sig_i, int32_t *sig_q, int *indices, int count, int16_t *out_bits) {
+    for (int i = 0; i < count; i++) {
+        int idx = indices[i];
+        // Если I > 0 -> бит 1, иначе 0 (зависит от твоей маппинг-таблицы)
+        out_bits[i] = (sig_i[idx] > 0) ? 1 : 0;
     }
-    return found;
 }
-
-
-
-
-
-
-
-
 
 /* Функция из лабы с передачей звукового файла*/
 int16_t *read_pcm(const char *filename, size_t *sample_count) {
