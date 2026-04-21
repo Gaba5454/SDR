@@ -3,8 +3,7 @@ import matplotlib.pyplot as plt
 import random
 
 # Открываем файл для чтения
-name = "../build/rxdata.pcm"
-
+name = "../build/txdata.pcm"
 data = []
 imag = []
 real = []
@@ -18,7 +17,7 @@ with open(name, "rb") as f:
             counter += 1
             count.append(counter)
         else:
-            imag.append(int.from_bytes(byte*0, byteorder='little', signed=True)) # Для BPSK byte умножаем на 0
+            imag.append(int.from_bytes(byte, byteorder='little', signed=True)) # Для BPSK byte умножаем на 0
         index += 1
         
 # Инициализируем список для хранения данных
@@ -30,9 +29,9 @@ k=np.ones(10)
 # fig, axs = plt.subplots(2, 1, layout='constrained')
 plt.figure(1)
 # axs[1].plot(count, np.abs(data),  color='grey')  # Используем scatter для диаграммы созвездия
-#plt.plot((imag),color='red')  # Используем scatter для диаграммы созвездия
-plt.plot(imag, color = 'red')
-plt.plot(real, color='blue')  # Используем scatter для диаграммы созвездия
+# plt.plot((imag),color='red')  # Используем scatter для диаграммы созвездия
+plt.plot(real,'o-', color = 'red', )
+plt.plot(imag,'o-', color='blue')  # Используем scatter для диаграммы созвездия
 plt.figure(2)
-plt.scatter(real,imag)
+plt.scatter(imag,real)
 plt.show()

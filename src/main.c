@@ -36,6 +36,8 @@ int main(int argc, char *argv[]) {
         printf("%d ", barkBits[i]);
     }
     printf("\n");
+
+    
     // Преобразование битов в символы
     IQComponent Mapped;
     BPSK(barkBits, SIZE+BARKER_LEN, &Mapped);
@@ -69,12 +71,19 @@ int main(int argc, char *argv[]) {
         printf("%d ", convI[i]);
     }
     printf("\n");
+    printf("\n");
+    printf("ConvQ:");
+    printf("\n");
+    for(int i=0; i < (SIZE+BARKER_LEN)*SAMPLE; i++) {
+        printf("%d ", convQ[i]);
+    }
+    printf("\n");
     // Формирование массива на передачу
     int16_t *arrayForTX = acp(convI, convQ, (SIZE+BARKER_LEN) * SAMPLE);
     printf("\n");
     printf("ConvI:");
     printf("\n");
-    for(int i=0; i < (SIZE+BARKER_LEN)*SAMPLE; i++) {
+    for(int i=0; i < (SIZE+BARKER_LEN)*SAMPLE*2; i++) {
         printf("%d ", arrayForTX[i]);
     }
     printf("\n");
@@ -83,6 +92,16 @@ int main(int argc, char *argv[]) {
     scanf("%d", &choose);*/
 
     FullMode(sdr, arrayForTX);
+    int16_t *tx_with_barker = malloc((SIZE + BARKER_LEN) * sizeof(int16_t));
+for(int i = 0; i < BARKER_LEN; i++) tx_with_barker[i] = BARKER_13[i];  // +1/-1
+for(int i = 0; i < SIZE; i++) tx_with_barker[BARKER_LEN + i] = (bits[i] == 0) ? -1 : 1;
+
+    demapper_and_compare(
+        "../build/cor_rxdata.pcm",  // файл с принятыми данными
+        tx_with_barker + BARKER_LEN,                     // массив переданных битов
+        192                          // количество символов
+        );
+
     free(arrayForTX);
     free(upSampledI);
     free(upSampledQ);
