@@ -9,7 +9,6 @@
 #include "modulations.h"
 
 
-
 void FullMode(SoapySDRDevice *sdr, int16_t *tx_array) {
     
     int sample_rate = 1e6;
@@ -36,7 +35,7 @@ void FullMode(SoapySDRDevice *sdr, int16_t *tx_array) {
     const size_t tx_mtu = SoapySDRDevice_getStreamMTU(sdr, txStream);
     printf("\ntx_mtu = %zu\nrx_mtu = %zu\n", tx_mtu, rx_mtu);
     
-    int16_t rx_buffer[2 * rx_mtu];  // Interleaved: [I0, Q0, I1, Q1, ...]
+    int16_t rx_buffer[2 * rx_mtu];
     int16_t *tx_buff = tx_array;
     
     // Сохранение TX-данных для отладки
@@ -46,12 +45,14 @@ void FullMode(SoapySDRDevice *sdr, int16_t *tx_array) {
     
     const long timeoutUs = 400000;
     long long last_time = 0;
-    size_t iteration_count = 20;
+    size_t iteration_count = 10;
     
     // Файлы для RX-данных
     FILE *filerx = fopen("../build/rxdata.pcm", "wb");
     FILE *filerx_raw = fopen("../build/raw_rxdata.pcm", "wb");
-    
+    FILE *file_ted = fopen("../build/ted_rxdata.pcm", "wb");
+
+
     // Цикл обработки
     for (size_t buffers_read = 0; buffers_read < iteration_count; buffers_read++) {
         
@@ -81,17 +82,32 @@ void FullMode(SoapySDRDevice *sdr, int16_t *tx_array) {
 
         int16_t scale = 100;
 
+        int16_t *matchRxDataI16 = calloc(matched_len, sizeof(int16_t));
+        int16_t *matchRxDataQ16 = calloc(matched_len, sizeof(int16_t));
         for(int i = 0; i < matched_len; i++){
-            int16_t matchRxDataI16 = (int16_t)(matchRxDataI32[i] / scale);
-            int16_t matchRxDataQ16 = (int16_t)(matchRxDataQ32[i] / scale);
-            fwrite(&matchRxDataI16, sizeof(int16_t), 1, filerx);
-            fwrite(&matchRxDataQ16, sizeof(int16_t), 1, filerx);
+            matchRxDataI16[i] = (int16_t)(matchRxDataI32[i] / scale);
+            matchRxDataQ16[i] = (int16_t)(matchRxDataQ32[i] / scale);
+            fwrite(&matchRxDataI16[i], sizeof(int16_t), 1, filerx);
+            fwrite(&matchRxDataQ16[i], sizeof(int16_t), 1, filerx);
         }
         
-        
-        //Лог времени
-        printf("Buffer: %lu - TimeDiff: %lli ns\n\n", buffers_read, timeNs - last_time);
-        last_time = timeNs;
+        // 3.TED
+        // В FullMode после matched filter:
+        int Nsps = SAMPLE;
+
+        // 1. Находим лучший offset
+        int best_offset = find_best_offset(matchRxDataI16, matchRxDataQ16, matched_len, Nsps);
+        printf("Best offset: %d\n", best_offset);
+
+        // 2. Записываем символы с этим offset
+        int num_symbols = matched_len / Nsps;
+        for (int sym = 0; sym < num_symbols; sym++) {
+            int idx = sym * Nsps + best_offset;
+            if (idx < matched_len) {
+                    fwrite(&matchRxDataI16[idx], sizeof(int16_t), 1, file_ted);
+                    fwrite(&matchRxDataQ16[idx], sizeof(int16_t), 1, file_ted);
+            }
+        }
 
 
         //Лог времени
@@ -112,10 +128,28 @@ void FullMode(SoapySDRDevice *sdr, int16_t *tx_array) {
         free(rxDataQ);
         free(matchRxDataI32);
         free(matchRxDataQ32);
+        free(matchRxDataI16);
+        free(matchRxDataQ16);
     }
     fclose(filerx);
     fclose(filerx_raw);
+    fclose(file_ted);
     
+// === 4. Частотная синхронизация (Costas Loop) ===
+// Costas Loop убирает вращение созвездия (частотную ошибку)
+costas_loop_sync("../build/ted_rxdata.pcm", "../build/sync_rxdata.pcm", 
+                 0.05,   // loop_bw
+                 1.0);   // damping
+
+debug_signal("../build/sync_rxdata.pcm", 192);
+
+// === 5. Кадровая синхронизация и финальная коррекция полярности ===
+// Эта функция теперь сама проверит инверсию и исправит её при записи
+extract_after_barker(
+    "../build/sync_rxdata.pcm",    // вход (уже после Costas)
+    "../build/cor_rxdata.pcm",     // выход
+    192                            // символов
+);
     // === Очистка SDR ===
     SoapySDRDevice_deactivateStream(sdr, rxStream, 0, 0);
     SoapySDRDevice_deactivateStream(sdr, txStream, 0, 0);
