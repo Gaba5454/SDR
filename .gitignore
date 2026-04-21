@@ -1,0 +1,12 @@
+# Ignore folders
+third_party/
+.vscode
+build/
+
+# Ignore files
+*.out
+*.swp
+*.pcm
+fun.*
+fun1.*
+fun2.*
